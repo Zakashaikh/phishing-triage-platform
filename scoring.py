@@ -213,3 +213,61 @@ def rule_urgency_language(e, atts):
         "urgency_language", points,
         f"Urgency/credential language: {', '.join(hits[:3])}", "T1656",
     )
+
+
+# --- rules 14-15: attachments ---
+
+def rule_dangerous_attachment(e, atts):
+    for a in atts:
+        if a["is_dangerous_ext"]:
+            return _finding(
+                "dangerous_attachment", WEIGHTS["dangerous_attachment"],
+                f"Dangerous attachment type: {a['filename']}", "T1566.001",
+            )
+    return None
+
+
+def rule_macro_attachment(e, atts):
+    for a in atts:
+        if a["is_macro_doc"]:
+            return _finding(
+                "macro_attachment", WEIGHTS["macro_attachment"],
+                f"Macro-enabled document: {a['filename']}", "T1566.001",
+            )
+    return None
+
+
+RULES = [
+    rule_spf_fail, rule_dkim_fail, rule_dmarc_fail,
+    rule_reply_to_mismatch, rule_return_path_mismatch,
+    rule_brand_freemail, rule_link_text_mismatch, rule_lookalike_domain,
+    rule_punycode_domain, rule_raw_ip_url, rule_url_shortener,
+    rule_suspicious_tld, rule_urgency_language,
+    rule_dangerous_attachment, rule_macro_attachment,
+]
+
+
+def score_email(email_data, attachments):
+    """Run all rules; return {'score': 0-100, 'verdict', 'findings': [Finding]}."""
+    findings = []
+    for rule in RULES:
+        f = rule(email_data, attachments)
+        if f:
+            findings.append(f)
+    score = min(100, sum(f["points"] for f in findings))
+    if score >= MALICIOUS_THRESHOLD:
+        verdict = "MALICIOUS"
+    elif score >= SUSPICIOUS_THRESHOLD:
+        verdict = "SUSPICIOUS"
+    else:
+        verdict = "CLEAN"
+    return {"score": score, "verdict": verdict, "findings": findings}
+
+
+def final_verdict(score_result, url_results, ip_results, file_results):
+    """VT evidence beats heuristics: any malicious>0 forces MALICIOUS."""
+    for r in list(url_results) + list(ip_results) + list(file_results):
+        m = r.get("malicious")
+        if isinstance(m, int) and m > 0:
+            return "MALICIOUS"
+    return score_result["verdict"]

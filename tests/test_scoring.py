@@ -123,3 +123,46 @@ def test_urgency_language_capped():
     one = make_email(body_text="please confirm your address")
     assert fired(scoring.rule_urgency_language, one)["points"] == 5
     assert fired(scoring.rule_urgency_language, make_email()) is None
+
+
+def att(filename="a.exe", dangerous=True, macro=False):
+    return {"filename": filename, "content_type": "application/octet-stream",
+            "size": 1, "sha256": "0" * 64,
+            "is_dangerous_ext": dangerous, "is_macro_doc": macro}
+
+
+def test_attachment_rules():
+    e = make_email()
+    assert fired(scoring.rule_dangerous_attachment, e, [att()])["points"] == 30
+    assert fired(scoring.rule_dangerous_attachment, e, [att(dangerous=False)]) is None
+    assert fired(scoring.rule_macro_attachment, e, [att("m.docm", dangerous=False, macro=True)])["points"] == 25
+    assert fired(scoring.rule_macro_attachment, e, []) is None
+
+
+def test_score_email_clean():
+    r = scoring.score_email(make_email(), [])
+    assert r == {"score": 0, "verdict": "CLEAN", "findings": []}
+
+
+def test_score_email_aggregates_and_caps():
+    e = make_email(spf="fail", dkim="fail", dmarc="fail",
+                   reply_to_domain="mail.ru", return_path_domain="mail.ru",
+                   from_display="PayPal Support", from_domain="gmail.com",
+                   subject="URGENT suspended", body_text="verify your account immediately")
+    r = scoring.score_email(e, [att()])
+    assert r["score"] == 100  # raw sum exceeds 100, capped
+    assert r["verdict"] == "MALICIOUS"
+    assert {f["rule_id"] for f in r["findings"]} >= {"spf_fail", "dkim_fail", "reply_to_mismatch", "brand_freemail", "dangerous_attachment"}
+
+
+def test_score_email_suspicious_band():
+    r = scoring.score_email(make_email(spf="fail", return_path_domain="mail.ru"), [])
+    assert r["score"] == 25 and r["verdict"] == "SUSPICIOUS"
+
+
+def test_final_verdict_vt_override():
+    clean = scoring.score_email(make_email(), [])
+    assert scoring.final_verdict(clean, [{"url": "x", "malicious": 3}], [], []) == "MALICIOUS"
+    assert scoring.final_verdict(clean, [{"url": "x", "malicious": 0}], [], []) == "CLEAN"
+    assert scoring.final_verdict(clean, [{"url": "x", "skipped": True, "reason": "no API key"}], [], []) == "CLEAN"
+    assert scoring.final_verdict(clean, [{"url": "x", "malicious": "rate_limited"}], [], []) == "CLEAN"
