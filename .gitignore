@@ -5,3 +5,7 @@ __pycache__/
 .pytest_cache/
 *_report.json
 summary.csv
+corpus/
+models/
+evaluation/*.png
+evaluation/results.csv
