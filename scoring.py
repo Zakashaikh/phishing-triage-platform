@@ -253,6 +253,16 @@ RULES = [
     rule_dangerous_attachment, rule_macro_attachment,
 ]
 
+# Canonical ordered rule ids (one per entry in RULES), used as ML feature columns.
+RULE_IDS = [
+    "spf_fail", "dkim_fail", "dmarc_fail",
+    "reply_to_mismatch", "return_path_mismatch",
+    "brand_freemail", "link_text_mismatch", "lookalike_domain",
+    "punycode_domain", "raw_ip_url", "url_shortener",
+    "suspicious_tld", "urgency_language",
+    "dangerous_attachment", "macro_attachment",
+]
+
 
 def score_email(email_data, attachments):
     """Run all rules; return {'score': 0-100, 'verdict', 'findings': [Finding]}."""

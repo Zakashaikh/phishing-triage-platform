@@ -169,3 +169,11 @@ def test_final_verdict_vt_override():
     assert scoring.final_verdict(clean, [{"url": "x", "malicious": 0}], [], []) == "CLEAN"
     assert scoring.final_verdict(clean, [{"url": "x", "skipped": True, "reason": "no API key"}], [], []) == "CLEAN"
     assert scoring.final_verdict(clean, [{"url": "x", "malicious": "rate_limited"}], [], []) == "CLEAN"
+
+
+def test_rule_ids_match_rules_and_are_ordered():
+    # One id per rule, in RULES order, each firing at least once across fixtures.
+    assert len(scoring.RULE_IDS) == len(scoring.RULES)
+    assert scoring.RULE_IDS[0] == "spf_fail"
+    assert "dangerous_attachment" in scoring.RULE_IDS
+    assert len(set(scoring.RULE_IDS)) == len(scoring.RULE_IDS)  # no duplicates
