@@ -104,3 +104,112 @@ def rule_return_path_mismatch(e, atts):
             "T1566.002",
         )
     return None
+
+
+# --- rules 6-13: content and URL deception ---
+
+def rule_brand_freemail(e, atts):
+    if e["from_domain"] not in FREEMAIL_DOMAINS:
+        return None
+    display = (e["from_display"] or "").lower()
+    for brand in BRAND_DOMAINS:
+        name = _sld(brand)
+        if name in display and brand != e["from_domain"]:
+            return _finding(
+                "brand_freemail", WEIGHTS["brand_freemail"],
+                f"Display name mentions '{name}' but sender is freemail {e['from_domain']}",
+                "T1656",
+            )
+    return None
+
+
+def rule_link_text_mismatch(e, atts):
+    for u in e["urls"]:
+        anchor = (u.get("anchor_text") or "").lower()
+        m = _DOMAIN_IN_TEXT.search(anchor)
+        if not m:
+            continue
+        text_d = _strip_www(m.group(1).lower())
+        href_d = _strip_www(u["domain"])
+        if not text_d or not href_d:
+            continue
+        if text_d != href_d and not href_d.endswith("." + text_d) and not text_d.endswith("." + href_d):
+            return _finding(
+                "link_text_mismatch", WEIGHTS["link_text_mismatch"],
+                f"Link text shows {text_d} but points to {href_d}",
+                "T1566.002",
+            )
+    return None
+
+
+def rule_lookalike_domain(e, atts):
+    candidates = {e["from_domain"]} | {u["domain"] for u in e["urls"]}
+    for domain in sorted(filter(None, candidates)):
+        sld = _sld(domain)
+        for brand in sorted(BRAND_DOMAINS):
+            brand_sld = _sld(brand)
+            if len(brand_sld) < 5:  # short names (ups, dhl, irs...) are edit-distance noise
+                continue
+            if domain == brand or domain.endswith("." + brand):
+                continue
+            if 1 <= _levenshtein(sld, brand_sld) <= 2:
+                return _finding(
+                    "lookalike_domain", WEIGHTS["lookalike_domain"],
+                    f"Domain {domain} looks like {brand}",
+                    "T1583.001",
+                )
+    return None
+
+
+def rule_punycode_domain(e, atts):
+    candidates = [e["from_domain"]] + [u["domain"] for u in e["urls"]]
+    for domain in candidates:
+        if "xn--" in (domain or ""):
+            return _finding(
+                "punycode_domain", WEIGHTS["punycode_domain"],
+                f"Punycode/IDN domain: {domain}", "T1583.001",
+            )
+    return None
+
+
+def rule_raw_ip_url(e, atts):
+    for u in e["urls"]:
+        if _IP_HOST.match(u["domain"] or ""):
+            return _finding(
+                "raw_ip_url", WEIGHTS["raw_ip_url"],
+                f"URL host is a literal IP: {u['domain']}", "T1566.002",
+            )
+    return None
+
+
+def rule_url_shortener(e, atts):
+    for u in e["urls"]:
+        if _strip_www(u["domain"] or "") in SHORTENER_DOMAINS:
+            return _finding(
+                "url_shortener", WEIGHTS["url_shortener"],
+                f"Shortened URL hides destination: {u['domain']}", "T1566.002",
+            )
+    return None
+
+
+def rule_suspicious_tld(e, atts):
+    for u in e["urls"]:
+        tld = (u["domain"] or "").rsplit(".", 1)[-1]
+        if tld in SUSPICIOUS_TLDS:
+            return _finding(
+                "suspicious_tld", WEIGHTS["suspicious_tld"],
+                f"High-abuse TLD .{tld} in {u['domain']}", "T1583.001",
+            )
+    return None
+
+
+def rule_urgency_language(e, atts):
+    text = f"{e['subject']} {e['body_text']}".lower()
+    hits = [k for k in URGENCY_KEYWORDS if k in text]
+    if not hits:
+        return None
+    points = min(WEIGHTS["urgency_cap"], WEIGHTS["urgency_language"] * len(hits))
+    return _finding(
+        "urgency_language", points,
+        f"Urgency/credential language: {', '.join(hits[:3])}", "T1656",
+    )
