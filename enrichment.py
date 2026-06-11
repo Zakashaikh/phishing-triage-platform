@@ -1,49 +1,68 @@
-import requests
-import os
 import base64
+import ipaddress
+import os
+
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 VT_KEY = os.getenv("VIRUSTOTAL_API_KEY")
+VT_BASE = "https://www.virustotal.com/api/v3"
+
+
+def vt_available():
+    return bool(VT_KEY)
+
 
 def check_url(url):
-    headers = {"x-apikey": VT_KEY}
-    try:
-        url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
-        r = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers, timeout=10)
-        if r.status_code == 200:
-            stats = r.json()["data"]["attributes"]["last_analysis_stats"]
-            return {"url": url, "malicious": stats["malicious"], "suspicious": stats["suspicious"]}
-        elif r.status_code == 429:
-            print(f" [WARNING] VirusTotal rate limit hit - try again in 60 seconds")
-            return {"url": url, "malicious": "rate_limited", "suspicious": "rate_limited"}
-        else:
-            print(f" [WARNING] VirusTotal returned status {r.status_code} for URL")
-            return {"url": url, "malicious": "unknown", "suspicious": "unknown"}
-    except requests.exceptions.Timeout:
-        print(f" [ERROR] Request timed out for URL: {url}")
-        return {"url": url, "malicious": "timeout", "suspicious": "timeout"}
-    except requests.exceptions.ConnectionError:
-        print(f" [ERROR] No internet connection or VirusTotal is down")
-        return {"url": url, "malicious": "connection_error", "suspicious": "connection_error"}
+    if not VT_KEY:
+        return {"url": url, "skipped": True, "reason": "no API key"}
+    url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
+    stats, status = _vt_get(f"urls/{url_id}")
+    if stats is None:
+        return {"url": url, "malicious": status, "suspicious": status}
+    return {"url": url, "malicious": stats["malicious"], "suspicious": stats.get("suspicious", 0)}
 
 
 def check_ip(ip):
-    headers = {"x-apikey": VT_KEY}
     try:
-        r = requests.get(f"https://www.virustotal.com/api/v3/ip_addresses/{ip}", headers=headers, timeout=10)
-        if r.status_code == 200:
-            stats = r.json()["data"]["attributes"]["last_analysis_stats"]
-            return {"ip": ip, "malicious": stats["malicious"]}
-        elif r.status_code == 429:
-            print(f" [WARNING] VirusTotal rate limit hit for IP: {ip}")
-            return {"ip": ip, "malicious": "rate_limited"}
-        else:
-            print(f" [WARNING] VirusTotal returned status {r.status_code} for IP")
-            return {"ip": ip, "malicious": "unknown"}
-    except requests.exceptions.Timeout:
-        print(f" [ERROR] Request timed out for IP: {ip}")
-        return {"ip": ip, "malicious": "timeout"}
-    except requests.exceptions.ConnectionError:
-        print(f" [ERROR] No internet connection or VirusTotal is down")
-        return {"ip": ip, "malicious": "connection_error"}
+        if not ipaddress.ip_address(ip).is_global:
+            return {"ip": ip, "skipped": True, "reason": "private/reserved"}
+    except ValueError:
+        return {"ip": ip, "skipped": True, "reason": "invalid"}
+    if not VT_KEY:
+        return {"ip": ip, "skipped": True, "reason": "no API key"}
+    stats, status = _vt_get(f"ip_addresses/{ip}")
+    if stats is None:
+        return {"ip": ip, "malicious": status}
+    return {"ip": ip, "malicious": stats["malicious"]}
+
+
+def check_file_hash(sha256):
+    if not VT_KEY:
+        return {"sha256": sha256, "skipped": True, "reason": "no API key"}
+    stats, status = _vt_get(f"files/{sha256}")
+    if stats is None:
+        return {"sha256": sha256, "malicious": status}
+    return {"sha256": sha256, "malicious": stats["malicious"]}
+
+
+def _vt_get(path):
+    """GET a VT endpoint; return (stats, 'ok') or (None, error_label)."""
+    try:
+        r = requests.get(f"{VT_BASE}/{path}", headers={"x-apikey": VT_KEY}, timeout=10)
+    except requests.RequestException as exc:
+        return None, type(exc).__name__
+    if r.status_code == 429:
+        return None, "rate_limited"
+    if r.status_code == 404:
+        return None, "not_found"
+    if r.status_code != 200:
+        return None, f"http_{r.status_code}"
+    try:
+        stats = r.json().get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
+    except ValueError:
+        return None, "bad_json"
+    if not isinstance(stats.get("malicious"), int):
+        return None, "bad_schema"
+    return stats, "ok"
