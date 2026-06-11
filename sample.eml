@@ -1,0 +1,27 @@
+From: security@paypa1-verify.com
+Reply-To: noreply@paypa1-verify.com
+Return-Path: <bounce@paypa1-verify.com>
+To: victim@example.com
+Subject: Urgent: Your PayPal account has been limited
+Date: Wed, 09 Apr 2026 10:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Received: from mail.paypa1-verify.com (192.168.1.100) by mx.example.com
+Authentication-Results: mx.example.com;
+  dkim=fail (bad signature) header.d=paypa1-verify.com;
+  dmarc=fail (p=reject) header.from=paypa1-verify.com;
+  spf=softfail (domain of paypa1-verify.com does not designate 192.168.1.100 as permitted sender)
+Received-SPF: softfail (domain of paypa1-verify.com does not designate 192.168.1.100 as permitted sender)
+
+Dear Customer,
+
+We have noticed unusual activity on your PayPal account. Your account has been temporarily limited.
+
+Please verify your account immediately by clicking the link below:
+
+http://www.eicar.org/download/eicar.com
+
+If you do not verify within 24 hours, your account will be permanently suspended.
+
+Thank you,
+PayPal Security Team
