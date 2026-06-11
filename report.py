@@ -7,7 +7,7 @@ def defang(ioc):
 
 
 def build_report(email_data, attachments, score_result, final_verdict_value,
-                 url_results, ip_results, file_results):
+                 url_results, ip_results, file_results, ml=None):
     """Assemble the JSON-serializable report dict (schema documented in README)."""
     email_keys = ("from_", "from_display", "from_domain", "reply_to", "reply_to_domain",
                   "return_path", "return_path_domain", "subject", "date",
@@ -23,6 +23,7 @@ def build_report(email_data, attachments, score_result, final_verdict_value,
         "heuristic_verdict": score_result["verdict"],
         "final_verdict": final_verdict_value,
         "enrichment": {"urls": url_results, "ips": ip_results, "files": file_results},
+        "ml": ml,
     }
 
 
@@ -89,6 +90,12 @@ def print_report(report):
         print("\n--- PARSE WARNINGS ---")
         for w in report["parse_errors"]:
             print(f"  {w}")
+
+    if report.get("ml"):
+        m = report["ml"]
+        print("\n--- MACHINE LEARNING ---")
+        print(f"  model: {m['config']}")
+        print(f"  phishing probability: {m['probability']:.3f}  -> {m['verdict']}")
 
     print(f"\nFINAL VERDICT: {report['final_verdict']}")
     print("=" * 60)

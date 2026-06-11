@@ -4,13 +4,14 @@ import os
 import sys
 
 import enrichment
+import ml
 import parse
 import report as report_mod
 import scoring
 from attachments import extract_attachments
 
 
-def analyse_file(filepath, use_api=True, output_dir=None, json_only=False):
+def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bundle=None):
     """Analyse one .eml; write its JSON report; return a summary row."""
     email_data = parse.parse_email(filepath)
     atts = extract_attachments(filepath)
@@ -27,8 +28,17 @@ def analyse_file(filepath, use_api=True, output_dir=None, json_only=False):
         file_results = [{"sha256": a["sha256"], "skipped": True, "reason": reason} for a in atts]
 
     fv = scoring.final_verdict(score_result, url_results, ip_results, file_results)
+
+    ml_info = None
+    if ml_bundle is not None:
+        prob = ml.predict_proba(ml_bundle, email_data, atts, score_result)
+        combined = ml.combined_verdict(score_result["verdict"], prob)
+        fv = scoring.final_verdict({"verdict": combined}, url_results, ip_results, file_results)
+        ml_info = {"probability": prob, "verdict": ml.ml_verdict(prob),
+                   "config": ml_bundle["config"]}
+
     rep = report_mod.build_report(email_data, atts, score_result, fv,
-                                  url_results, ip_results, file_results)
+                                  url_results, ip_results, file_results, ml=ml_info)
     if not json_only:
         report_mod.print_report(rep)
 
@@ -43,7 +53,7 @@ def analyse_file(filepath, use_api=True, output_dir=None, json_only=False):
             "verdict": fv, "error": ""}
 
 
-def analyse_folder(folder, use_api=True, output_dir=None, json_only=False):
+def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bundle=None):
     """Analyse every .eml in a folder; write summary.csv; never abort on one bad email."""
     names = sorted(f for f in os.listdir(folder) if f.lower().endswith(".eml"))
     if not names:
@@ -54,7 +64,8 @@ def analyse_folder(folder, use_api=True, output_dir=None, json_only=False):
     for name in names:
         try:
             rows.append(analyse_file(os.path.join(folder, name), use_api=use_api,
-                                     output_dir=output_dir, json_only=json_only))
+                                     output_dir=output_dir, json_only=json_only,
+                                     ml_bundle=ml_bundle))
         except Exception as exc:
             rows.append({"file": name, "score": "", "verdict": "ERROR", "error": str(exc)})
 
@@ -79,13 +90,18 @@ def main(argv=None):
     p.add_argument("--ml", action="store_true", help="also score with the trained ML model")
     args = p.parse_args(argv)
 
+    ml_bundle = None
     if args.ml:
-        print("ML mode is not available yet: no trained model in models/. Coming in Milestone 3.")
-        return 2
+        ml_bundle = ml.load_bundle()
+        if ml_bundle is None:
+            print("--ml requested but no trained model found in models/. "
+                  "Run: python evaluation/train.py")
+            return 2
     if args.output:
         os.makedirs(args.output, exist_ok=True)
 
-    kwargs = dict(use_api=not args.no_api, output_dir=args.output, json_only=args.json_only)
+    kwargs = dict(use_api=not args.no_api, output_dir=args.output,
+                  json_only=args.json_only, ml_bundle=ml_bundle)
     if os.path.isdir(args.target):
         analyse_folder(args.target, **kwargs)
     elif os.path.isfile(args.target):

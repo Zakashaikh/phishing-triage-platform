@@ -38,6 +38,21 @@ def test_save_report(tmp_path):
     assert json.loads(path.read_text()) == {"score": 1}
 
 
+def test_report_includes_ml_block():
+    score_result = {"score": 10, "verdict": "CLEAN", "findings": []}
+    ml_info = {"probability": 0.91, "verdict": "MALICIOUS", "config": "logreg_hybrid"}
+    rep = report.build_report(_email_data(), [], score_result, "MALICIOUS",
+                              [], [], [], ml=ml_info)
+    assert rep["ml"]["probability"] == 0.91
+    report.print_report(rep)  # must not raise
+
+
+def test_report_ml_absent_by_default():
+    score_result = {"score": 0, "verdict": "CLEAN", "findings": []}
+    rep = report.build_report(_email_data(), [], score_result, "CLEAN", [], [], [])
+    assert rep["ml"] is None
+
+
 def test_print_report_smoke(capsys):
     score_result = {"score": 30, "verdict": "SUSPICIOUS",
                     "findings": [{"rule_id": "spf_fail", "points": 15, "detail": "SPF check failed", "mitre": "T1672"},

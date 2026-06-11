@@ -24,7 +24,8 @@ def predict_proba(bundle, email_data, attachments, score_result):
                                         bundle["use_rule_features"])]
     text = [features.email_text(email_data)]
     X = features.assemble_matrix(struct, text, bundle["vectorizer"])
-    return float(bundle["model"].predict_proba(X)[0][1])
+    # Densify: HistGradientBoosting rejects sparse input, and one row is cheap.
+    return float(bundle["model"].predict_proba(X.toarray())[0][1])
 
 
 def ml_verdict(prob):
