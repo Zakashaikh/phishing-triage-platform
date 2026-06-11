@@ -1,0 +1,11 @@
+Return-Path: <support@paypa1.com>
+Received: from mx.paypa1.com (mx.paypa1.com [198.51.100.7]) by mx.corp.com with ESMTP; Mon, 1 Jun 2026 10:00:00 +0000
+Received-SPF: pass (paypa1.com designates 198.51.100.7 as permitted sender)
+Authentication-Results: mx.corp.com; dkim=pass header.d=paypa1.com; dmarc=pass
+From: support@paypa1.com
+To: bob@corp.com
+Subject: Action required on your account
+Date: Mon, 1 Jun 2026 10:00:00 +0000
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Please sign in at <a href="http://paypa1.com/login">paypal.com</a> to continue.</p></body></html>

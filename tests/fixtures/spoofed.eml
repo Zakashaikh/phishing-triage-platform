@@ -1,0 +1,13 @@
+Return-Path: <bounce@mail.ru>
+Received: from evil.mail.ru (evil.mail.ru [203.0.113.5]) by mx.corp.com with ESMTP; Mon, 1 Jun 2026 10:00:00 +0000
+Received-SPF: fail (gmail.com does not designate 203.0.113.5 as permitted sender)
+Authentication-Results: mx.corp.com; dkim=fail; dmarc=fail
+From: "PayPal Support" <support@gmail.com>
+Reply-To: refunds@mail.ru
+To: bob@corp.com
+Subject: URGENT: your account suspended
+Date: Mon, 1 Jun 2026 10:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Your account has been suspended due to unusual activity.
+Verify your account immediately: http://paypal-secure.top/verify

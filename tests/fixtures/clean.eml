@@ -1,0 +1,12 @@
+Return-Path: <alice@example.com>
+Received: from mail.example.com (mail.example.com [8.8.8.8]) by mx.corp.com with ESMTP; Mon, 1 Jun 2026 10:00:00 +0000
+Received: from internal.example.com (internal.example.com [10.0.0.1]) by mail.example.com; Mon, 1 Jun 2026 09:59:58 +0000
+Received-SPF: pass (example.com designates 8.8.8.8 as permitted sender)
+Authentication-Results: mx.corp.com; dkim=pass header.d=example.com; dmarc=pass
+From: Alice Doe <alice@example.com>
+To: bob@corp.com
+Subject: Meeting notes
+Date: Mon, 1 Jun 2026 10:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Hi Bob, notes from today are at https://example.com/notes. See you Thursday.

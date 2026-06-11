@@ -1,0 +1,22 @@
+Return-Path: <billing@example.com>
+Received: from mail.example.com (mail.example.com [8.8.8.8]) by mx.corp.com with ESMTP; Mon, 1 Jun 2026 10:00:00 +0000
+Received-SPF: pass (example.com designates 8.8.8.8 as permitted sender)
+Authentication-Results: mx.corp.com; dkim=pass; dmarc=pass
+From: billing@example.com
+To: bob@corp.com
+Subject: Invoice attached
+Date: Mon, 1 Jun 2026 10:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUND1"
+
+--BOUND1
+Content-Type: text/plain; charset=utf-8
+
+Invoice attached.
+--BOUND1
+Content-Type: application/octet-stream; name="invoice.pdf.exe"
+Content-Disposition: attachment; filename="invoice.pdf.exe"
+Content-Transfer-Encoding: base64
+
+TVpmYWtlZXhl
+--BOUND1--
