@@ -1,16 +1,23 @@
 import re
 
 # --- tunable constants (weights revisited with Milestone 2 evaluation data) ---
+# Weights tuned against the Milestone 2 corpus (2945 phish / 4150 ham).
+# See evaluation/RESULTS.md for the per-rule fire rates behind each value.
 WEIGHTS = {
     "spf_fail": 15, "spf_softfail": 10, "dkim_fail": 15, "dmarc_fail": 15,
-    "reply_to_mismatch": 20, "return_path_mismatch": 10, "brand_freemail": 25,
-    "link_text_mismatch": 25, "lookalike_domain": 25, "punycode_domain": 15,
+    # Header-mismatch rules fire MORE on legitimate mailing-list traffic than
+    # on phishing in the corpus, so they are weak/anti-signals: reply_to cut
+    # 20->5, return_path 10->0 (kept as an informational finding only).
+    "reply_to_mismatch": 5, "return_path_mismatch": 0, "brand_freemail": 25,
+    # Strongest clean discriminators (high phish rate, near-zero ham rate):
+    # link_text_mismatch 25->30, raw_ip_url stays 20, urgency 5/15 -> 7/21.
+    "link_text_mismatch": 30, "lookalike_domain": 25, "punycode_domain": 15,
     "raw_ip_url": 20, "url_shortener": 10, "suspicious_tld": 10,
-    "urgency_language": 5, "urgency_cap": 15,
+    "urgency_language": 7, "urgency_cap": 21,
     "dangerous_attachment": 30, "macro_attachment": 25,
 }
 MALICIOUS_THRESHOLD = 50
-SUSPICIOUS_THRESHOLD = 25
+SUSPICIOUS_THRESHOLD = 20  # tuned: precision saturates ~0.90 by score 20 (see RESULTS.md)
 
 BRAND_DOMAINS = {
     "paypal.com", "microsoft.com", "apple.com", "amazon.com", "netflix.com",

@@ -56,13 +56,14 @@ def test_dkim_and_dmarc_fail():
 def test_reply_to_mismatch():
     e = make_email(reply_to_domain="mail.ru")
     f = fired(scoring.rule_reply_to_mismatch, e)
-    assert f["points"] == 20 and "mail.ru" in f["detail"]
+    assert f["points"] == 5 and "mail.ru" in f["detail"]  # tuned down (noisy on ham)
     assert fired(scoring.rule_reply_to_mismatch, make_email(reply_to_domain="example.com")) is None
     assert fired(scoring.rule_reply_to_mismatch, make_email()) is None  # empty Reply-To
 
 
 def test_return_path_mismatch():
-    assert fired(scoring.rule_return_path_mismatch, make_email(return_path_domain="mail.ru"))["points"] == 10
+    # Still fires (informational) but tuned to 0 points: anti-signal on the corpus.
+    assert fired(scoring.rule_return_path_mismatch, make_email(return_path_domain="mail.ru"))["points"] == 0
     assert fired(scoring.rule_return_path_mismatch, make_email(return_path_domain="example.com")) is None
 
 
@@ -76,7 +77,7 @@ def test_brand_freemail():
 
 def test_link_text_mismatch():
     e = make_email(urls=[url("http://evil.com/x", "evil.com", anchor="paypal.com")])
-    assert fired(scoring.rule_link_text_mismatch, e)["points"] == 25
+    assert fired(scoring.rule_link_text_mismatch, e)["points"] == 30  # tuned up (clean signal)
     # www-prefix and subdomains of the same site must NOT fire
     same = make_email(urls=[url("https://www.paypal.com/x", "www.paypal.com", anchor="paypal.com")])
     assert fired(scoring.rule_link_text_mismatch, same) is None
@@ -119,9 +120,9 @@ def test_suspicious_tld():
 def test_urgency_language_capped():
     e = make_email(subject="URGENT action", body_text="verify your account immediately or it will expire, act now, click here")
     f = fired(scoring.rule_urgency_language, e)
-    assert f["points"] == 15  # >=3 hits capped at 15
+    assert f["points"] == 21  # >=3 hits capped at 21 (tuned up: strong signal)
     one = make_email(body_text="please confirm your address")
-    assert fired(scoring.rule_urgency_language, one)["points"] == 5
+    assert fired(scoring.rule_urgency_language, one)["points"] == 7
     assert fired(scoring.rule_urgency_language, make_email()) is None
 
 
@@ -156,7 +157,9 @@ def test_score_email_aggregates_and_caps():
 
 
 def test_score_email_suspicious_band():
-    r = scoring.score_email(make_email(spf="fail", return_path_domain="mail.ru"), [])
+    # spf_fail (15) + url_shortener (10) = 25, within [20, 50) -> SUSPICIOUS
+    e = make_email(spf="fail", urls=[url("https://bit.ly/x", "bit.ly")])
+    r = scoring.score_email(e, [])
     assert r["score"] == 25 and r["verdict"] == "SUSPICIOUS"
 
 
