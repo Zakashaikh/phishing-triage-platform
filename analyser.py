@@ -25,7 +25,7 @@ def analyse_email(source, use_api=True, ml_bundle=None):
         ip_results = [enrichment.check_ip(ip) for ip in email_data["ips"]]
         file_results = [enrichment.check_file_hash(a["sha256"]) for a in atts]
     else:
-        reason = "disabled (--no-api)" if not use_api else "no API key"
+        reason = "disabled (offline mode)" if not use_api else "no API key"
         url_results = [{"url": u["url"], "skipped": True, "reason": reason} for u in email_data["urls"]]
         ip_results = [{"ip": ip, "skipped": True, "reason": reason} for ip in email_data["ips"]]
         file_results = [{"sha256": a["sha256"], "skipped": True, "reason": reason} for a in atts]
