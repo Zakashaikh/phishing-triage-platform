@@ -129,3 +129,56 @@ it.
 3. The remaining errors (marketing-urgency false positives, header-only false
    negatives) are the motivation for the Milestone 3 ML model, which learns
    joint feature weights instead of a fixed additive score.
+
+---
+
+# ML layer (Milestone 3)
+
+Four configurations were compared on the same stratified 80/20 split — every
+model was trained on 5,669 emails and judged only on the 1,417 held-out emails
+it never saw. TF-IDF was fitted on training text only (no leakage from the
+test set into the vocabulary).
+
+| Config | What it is | Precision | Recall | F1 | FP rate | ROC AUC |
+|--------|-----------|----------:|-------:|---:|--------:|--------:|
+| `rules_only` | heuristic score ≥ 20 (baseline) | 0.886 | 0.514 | 0.650 | 0.047 | — |
+| `logreg_text` | Logistic Regression, structural + TF-IDF (no rule features) | 0.990 | 0.986 | 0.988 | 0.007 | 0.998 |
+| `logreg_hybrid` | Logistic Regression, rules + structural + TF-IDF | 0.985 | 0.981 | 0.983 | 0.011 | 0.997 |
+| `histgbm_hybrid` | Hist Gradient Boosting, rules + structural + TF-IDF | **0.995** | **1.000** | **0.997** | **0.004** | **1.000** |
+
+![ROC](../docs/img/roc_curve.png)
+
+**The ML models dominate the rules.** Even the plainest model (logistic
+regression on word frequencies, no hand-written rules at all) nearly doubles
+recall (0.51 → 0.99) while *cutting* the false-positive rate. The gradient
+boosting hybrid misses zero phish in the held-out set. The winner
+(`histgbm_hybrid`) ships in `models/model.joblib` and powers `--ml`.
+
+**Why ML wins here:** the rules' biggest weakness from Milestone 2 was
+plain-text phish with no auth headers and no URL tricks — nothing for the
+rules to fire on. But the *words* in those messages ("account", "verify",
+"bank", "click") are extremely distinctive against this ham, and TF-IDF hands
+the model exactly that signal. It also resolves the marketing-urgency false
+positives: a newsletter's overall word profile looks nothing like a phish even
+when it says "act now".
+
+**Honest caveats — read before quoting these numbers:**
+
+1. **An AUC of 1.000 is a warning sign, not just a win.** The phishing corpus
+   (2005–2023, Nazario) and ham corpus (2003, SpamAssassin) differ in era,
+   language style, and even formatting conventions. A flexible model can pick
+   up *corpus* tells (vintage of HTML, mailing-list footers) along with
+   *phishing* tells. The separation here is real but inflated by how
+   different the two collections are.
+2. **These numbers would drop on modern, same-source mail.** The honest claim
+   is "near-perfect separation **of this corpus**," not "99.7% accurate
+   phishing detection in production."
+3. **The rules still matter.** They are explainable (an analyst can read *why*
+   an email was flagged, with MITRE mappings), they need no training data, and
+   they generalize to signals (SPF/DKIM failures, punycode) that this corpus
+   simply could not teach the model. `--ml` therefore reports both: the rule
+   findings *and* the model probability, combined by taking the more severe
+   verdict.
+
+Reproduce: `python evaluation/train.py` (artifacts: `evaluation/roc_curve.png`,
+`evaluation/model_comparison.csv`, `models/model.joblib`).
