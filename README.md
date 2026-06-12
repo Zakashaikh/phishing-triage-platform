@@ -174,7 +174,7 @@ webapp/          Flask dashboard
 evaluation/      corpus download, metrics, training, RESULTS.md
 models/          trained model (joblib)
 tests/           81 pytest tests + crafted .eml fixtures
-docs/            spec, per-milestone plans, charts
+docs/            charts used in this README
 corpus/          (gitignored, created by evaluation/download_corpus.py)
 ```
 
