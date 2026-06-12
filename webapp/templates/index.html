@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phishing Triage Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #1a2233; --panel2: #222c42; --text: #e8edf6;
+    --muted: #8fa0bd; --line: #2e3a55;
+    --clean: #2a9d8f; --suspicious: #e9a23b; --malicious: #e63946;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { padding: 18px 28px; border-bottom: 1px solid var(--line);
+           display: flex; align-items: baseline; gap: 14px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header span { color: var(--muted); font-size: 13px; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  #dropzone { border: 2px dashed var(--line); border-radius: 12px;
+              padding: 38px; text-align: center; color: var(--muted);
+              background: var(--panel); cursor: pointer; transition: border-color .15s; }
+  #dropzone.drag { border-color: var(--clean); color: var(--text); }
+  #dropzone strong { color: var(--text); }
+  #controls { display: flex; gap: 18px; align-items: center; margin-top: 12px;
+              color: var(--muted); font-size: 14px; }
+  #error { display: none; margin-top: 14px; padding: 10px 14px; border-radius: 8px;
+           background: #3a1f27; color: #ff9aa4; border: 1px solid #6b2a35; }
+
+  #result { display: none; margin-top: 26px; }
+  #banner { display: flex; align-items: center; gap: 22px; padding: 18px 22px;
+            border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+  #gauge { width: 96px; height: 96px; border-radius: 50%; flex: none;
+           display: flex; align-items: center; justify-content: center; }
+  #gauge > div { width: 72px; height: 72px; border-radius: 50%; background: var(--panel);
+                 display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #gauge b { font-size: 22px; }  #gauge small { color: var(--muted); font-size: 10px; }
+  #verdict { font-size: 26px; font-weight: 700; }
+  .v-CLEAN { color: var(--clean); }  .v-SUSPICIOUS { color: var(--suspicious); }
+  .v-MALICIOUS { color: var(--malicious); }
+  #meta { color: var(--muted); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+
+  section { margin-top: 20px; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 12px; padding: 16px 20px; }
+  section h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .12em;
+               text-transform: uppercase; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td, th { padding: 7px 10px; text-align: left; border-top: 1px solid var(--line);
+           vertical-align: top; overflow-wrap: anywhere; }
+  th { color: var(--muted); font-weight: 600; border-top: none; font-size: 12px; }
+  .pts { font-weight: 700; color: var(--suspicious); white-space: nowrap; }
+  .mitre { font-family: Consolas, monospace; font-size: 12px; color: var(--muted); }
+  .empty { color: var(--muted); font-style: italic; }
+  .flag { background: #4a2330; color: #ffb3bb; border-radius: 4px; padding: 0 3px; }
+
+  #mlbar { height: 10px; border-radius: 6px; background: var(--panel2); overflow: hidden; }
+  #mlbar > div { height: 100%; }
+  #preview { white-space: pre-wrap; font-family: Consolas, monospace; font-size: 13px;
+             background: var(--panel2); border-radius: 8px; padding: 14px;
+             max-height: 320px; overflow: auto; }
+  mark { background: var(--malicious); color: #fff; border-radius: 3px; padding: 0 2px; }
+  #spin { display: none; margin-top: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Phishing Triage Dashboard</h1>
+  <span>local analysis &mdash; nothing leaves this machine{% if ml_available %} &middot; ML model loaded{% endif %}</span>
+</header>
+<main>
+  <div id="dropzone">
+    <strong>Drop an .eml file here</strong> or click to choose one<br>
+    <span style="font-size:12px">analysed in memory &mdash; never saved to disk</span>
+    <input type="file" id="file" accept=".eml,message/rfc822" hidden>
+  </div>
+  <div id="controls">
+    {% if vt_available %}
+    <label><input type="checkbox" id="use_vt"> Use VirusTotal for this email (sends URL/IP/hash lookups)</label>
+    {% else %}
+    <span>VirusTotal: not configured (set VIRUSTOTAL_API_KEY in .env to enable)</span>
+    {% endif %}
+  </div>
+  <div id="spin">Analysing&hellip;</div>
+  <div id="error"></div>
+
+  <div id="result">
+    <div id="banner">
+      <div id="gauge"><div><b id="score"></b><small>/100</small></div></div>
+      <div>
+        <div id="verdict"></div>
+        <div id="meta"></div>
+      </div>
+    </div>
+    <section><h2>Findings</h2><div id="findings"></div></section>
+    <section id="mlsec" style="display:none"><h2>Machine learning</h2>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div id="mlbar" style="flex:1"><div></div></div><div id="mltext"></div>
+      </div>
+    </section>
+    <section><h2>URLs (defanged)</h2><div id="urls"></div></section>
+    <section><h2>IPs (defanged)</h2><div id="ips"></div></section>
+    <section><h2>Attachments</h2><div id="atts"></div></section>
+    <section><h2>VirusTotal</h2><div id="vt"></div></section>
+    <section><h2>Safe body preview</h2><div id="preview"></div></section>
+  </div>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const defang = s => s.replace(/^https:\/\//, "hxxps://").replace(/^http:\/\//, "hxxp://").replaceAll(".", "[.]");
+
+const drop = $("dropzone"), fileInput = $("file");
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+drop.addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("drag");
+  if (e.dataTransfer.files.length) analyse(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files.length) analyse(fileInput.files[0]); });
+
+async function analyse(file) {
+  $("error").style.display = "none"; $("result").style.display = "none";
+  $("spin").style.display = "block";
+  const form = new FormData();
+  form.append("email", file);
+  const vt = $("use_vt");
+  if (vt && vt.checked) form.append("use_virustotal", "on");
+  let rep, resp;
+  try {
+    resp = await fetch("/analyse", { method: "POST", body: form });
+    rep = await resp.json();
+  } catch (e) {
+    return fail("Could not reach the analyser: " + e);
+  } finally {
+    $("spin").style.display = "none";
+  }
+  if (!resp.ok) return fail(rep.error || ("HTTP " + resp.status));
+  render(rep);
+}
+
+function fail(msg) {
+  const el = $("error");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function cssVerdict(v) { return ({CLEAN:1, SUSPICIOUS:1, MALICIOUS:1})[v] ? v : "CLEAN"; }
+function colorOf(v) {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue({CLEAN:"--clean", SUSPICIOUS:"--suspicious", MALICIOUS:"--malicious"}[cssVerdict(v)]);
+}
+
+// Build a table from rows of [cells]; every cell set via textContent (XSS-safe).
+function table(host, headers, rows, emptyText) {
+  host.replaceChildren();
+  if (!rows.length) {
+    const p = document.createElement("div");
+    p.className = "empty"; p.textContent = emptyText;
+    host.appendChild(p); return;
+  }
+  const t = document.createElement("table");
+  const tr = document.createElement("tr");
+  for (const h of headers) { const th = document.createElement("th"); th.textContent = h; tr.appendChild(th); }
+  t.appendChild(tr);
+  for (const row of rows) {
+    const r = document.createElement("tr");
+    row.forEach((cell, i) => {
+      const td = document.createElement("td");
+      if (cell && cell.cls) { td.className = cell.cls; td.textContent = cell.text; }
+      else td.textContent = cell;
+      r.appendChild(td);
+    });
+    t.appendChild(r);
+  }
+  host.appendChild(t);
+}
+
+function render(rep) {
+  const v = rep.final_verdict, col = colorOf(v);
+  $("score").textContent = rep.score;
+  $("gauge").style.background =
+    `conic-gradient(${col} ${rep.score * 3.6}deg, var(--panel2) 0deg)`;
+  const verdictEl = $("verdict");
+  verdictEl.textContent = v;
+  verdictEl.className = "v-" + cssVerdict(v);
+
+  const e = rep.email;
+  $("meta").replaceChildren();
+  for (const [k, val] of [["From", e.from_], ["Reply-To", e.reply_to || "-"],
+                          ["Subject", e.subject],
+                          ["Auth", `SPF ${e.spf} / DKIM ${e.dkim} / DMARC ${e.dmarc}`]]) {
+    const d = document.createElement("div");
+    d.textContent = `${k}: ${val}`;
+    $("meta").appendChild(d);
+  }
+
+  table($("findings"), ["Points", "Rule", "Detail", "MITRE"],
+    rep.findings.map(f => [{cls:"pts", text:"+" + f.points}, f.rule_id, f.detail,
+                           {cls:"mitre", text:f.mitre}]),
+    "no red flags found");
+
+  if (rep.ml) {
+    $("mlsec").style.display = "";
+    const pct = Math.round(rep.ml.probability * 100);
+    const bar = $("mlbar").firstElementChild;
+    bar.style.width = pct + "%";
+    bar.style.background = colorOf(rep.ml.verdict);
+    $("mltext").textContent = `${pct}% phishing probability (${rep.ml.config})`;
+  } else $("mlsec").style.display = "none";
+
+  table($("urls"), ["URL"], rep.urls.map(u => [defang(u)]), "no URLs in this email");
+  table($("ips"), ["IP"], rep.ips.map(ip => [defang(ip)]), "no public IPs in headers");
+  table($("atts"), ["File", "Type", "Size", "SHA-256", "Flags"],
+    rep.attachments.map(a => [a.filename, a.content_type, a.size + " B",
+      a.sha256.slice(0, 16) + "…",
+      [a.is_dangerous_ext ? "DANGEROUS-EXT" : "", a.is_macro_doc ? "MACRO" : ""].filter(Boolean).join(", ") || "-"]),
+    "no attachments");
+
+  const vtRows = [];
+  for (const r of [...rep.enrichment.urls, ...rep.enrichment.ips, ...rep.enrichment.files]) {
+    const ioc = r.url || r.ip || r.sha256 || "?";
+    vtRows.push([defang(ioc), r.skipped ? `skipped (${r.reason})` : `malicious=${r.malicious}`]);
+  }
+  table($("vt"), ["Indicator", "Result"], vtRows, "no lookups performed");
+
+  renderPreview(rep.body_preview || "", rep.urls);
+  $("result").style.display = "block";
+}
+
+// Escaped text nodes only; URLs the scorer saw get wrapped in <mark>.
+function renderPreview(text, urls) {
+  const host = $("preview");
+  host.replaceChildren();
+  if (!text.trim()) { host.textContent = "(empty body)"; return; }
+  let pieces = [text];
+  for (const u of urls) {
+    const next = [];
+    for (const piece of pieces) {
+      if (typeof piece !== "string") { next.push(piece); continue; }
+      let rest = piece, idx;
+      while ((idx = rest.indexOf(u)) !== -1) {
+        next.push(rest.slice(0, idx), {url: u});
+        rest = rest.slice(idx + u.length);
+      }
+      next.push(rest);
+    }
+    pieces = next;
+  }
+  for (const piece of pieces) {
+    if (typeof piece === "string") host.appendChild(document.createTextNode(piece));
+    else {
+      const m = document.createElement("mark");
+      m.textContent = piece.url;
+      host.appendChild(m);
+    }
+  }
+}
+</script>
+</body>
+</html>
