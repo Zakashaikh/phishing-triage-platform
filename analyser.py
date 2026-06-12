@@ -11,10 +11,13 @@ import scoring
 from attachments import extract_attachments
 
 
-def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bundle=None):
-    """Analyse one .eml; write its JSON report; return a summary row."""
-    email_data = parse.parse_email(filepath)
-    atts = extract_attachments(filepath)
+def analyse_email(source, use_api=True, ml_bundle=None):
+    """Run the full pipeline on an .eml path or raw bytes; returns the report dict.
+
+    Shared by the CLI (analyse_file) and the web dashboard (webapp/app.py).
+    """
+    email_data = parse.parse_email(source)
+    atts = extract_attachments(source)
     score_result = scoring.score_email(email_data, atts)
 
     if use_api and enrichment.vt_available():
@@ -37,8 +40,13 @@ def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bu
         ml_info = {"probability": prob, "verdict": ml.ml_verdict(prob),
                    "config": ml_bundle["config"]}
 
-    rep = report_mod.build_report(email_data, atts, score_result, fv,
-                                  url_results, ip_results, file_results, ml=ml_info)
+    return report_mod.build_report(email_data, atts, score_result, fv,
+                                   url_results, ip_results, file_results, ml=ml_info)
+
+
+def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bundle=None):
+    """Analyse one .eml; write its JSON report; return a summary row."""
+    rep = analyse_email(filepath, use_api=use_api, ml_bundle=ml_bundle)
     if not json_only:
         report_mod.print_report(rep)
 
@@ -50,7 +58,7 @@ def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bu
         print(f"Report saved to {report_path}")
 
     return {"file": os.path.basename(filepath), "score": rep["score"],
-            "verdict": fv, "error": ""}
+            "verdict": rep["final_verdict"], "error": ""}
 
 
 def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bundle=None):

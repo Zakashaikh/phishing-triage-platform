@@ -53,6 +53,12 @@ def test_report_ml_absent_by_default():
     assert rep["ml"] is None
 
 
+def test_report_includes_body_preview():
+    score_result = {"score": 0, "verdict": "CLEAN", "findings": []}
+    rep = report.build_report(_email_data(), [], score_result, "CLEAN", [], [], [])
+    assert rep["body_preview"] == "b"
+
+
 def test_print_report_smoke(capsys):
     score_result = {"score": 30, "verdict": "SUSPICIOUS",
                     "findings": [{"rule_id": "spf_fail", "points": 15, "detail": "SPF check failed", "mitre": "T1672"},

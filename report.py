@@ -24,6 +24,7 @@ def build_report(email_data, attachments, score_result, final_verdict_value,
         "final_verdict": final_verdict_value,
         "enrichment": {"urls": url_results, "ips": ip_results, "files": file_results},
         "ml": ml,
+        "body_preview": email_data["body_text"][:2000],
     }
 
 

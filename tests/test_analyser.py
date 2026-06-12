@@ -40,6 +40,14 @@ def test_folder_mode_writes_summary(tmp_path):
     assert names["lookalike.eml"] == "MALICIOUS"
 
 
+def test_analyse_email_accepts_raw_bytes():
+    raw = (FIXTURES / "spoofed.eml").read_bytes()
+    rep = analyser.analyse_email(raw, use_api=False)
+    assert rep["final_verdict"] == "MALICIOUS"
+    assert rep["enrichment"]["urls"][0]["skipped"] is True
+    assert "suspended" in rep["body_preview"]
+
+
 def test_main_missing_target(capsys):
     assert analyser.main(["no_such_file.eml"]) == 1
 
