@@ -23,7 +23,7 @@ venv\Scripts\python.exe webapp\app.py     →  http://127.0.0.1:5000
 
 Uploads are analysed **in memory only** — never written to disk. Analysis is offline by default; VirusTotal is per-request opt-in when a key is configured.
 
-<!-- docs/img/dashboard.png — add a screenshot of the dashboard here -->
+![Triage dashboard analysing a spoofed PayPal email](docs/img/dashboard.png)
 
 ## Quickstart
 
