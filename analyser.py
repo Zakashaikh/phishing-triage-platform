@@ -4,6 +4,7 @@ import os
 import sys
 
 import enrichment
+import iocs
 import ml
 import parse
 import report as report_mod
@@ -44,9 +45,12 @@ def analyse_email(source, use_api=True, ml_bundle=None):
                                    url_results, ip_results, file_results, ml=ml_info)
 
 
-def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bundle=None):
+def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bundle=None,
+                 ioc_sink=None):
     """Analyse one .eml; write its JSON report; return a summary row."""
     rep = analyse_email(filepath, use_api=use_api, ml_bundle=ml_bundle)
+    if ioc_sink is not None:
+        ioc_sink.extend(iocs.extract_iocs(rep, source=os.path.basename(filepath)))
     if not json_only:
         report_mod.print_report(rep)
 
@@ -61,7 +65,8 @@ def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bu
             "verdict": rep["final_verdict"], "error": ""}
 
 
-def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bundle=None):
+def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bundle=None,
+                   ioc_sink=None):
     """Analyse every .eml in a folder; write summary.csv; never abort on one bad email."""
     names = sorted(f for f in os.listdir(folder) if f.lower().endswith(".eml"))
     if not names:
@@ -73,7 +78,7 @@ def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bu
         try:
             rows.append(analyse_file(os.path.join(folder, name), use_api=use_api,
                                      output_dir=output_dir, json_only=json_only,
-                                     ml_bundle=ml_bundle))
+                                     ml_bundle=ml_bundle, ioc_sink=ioc_sink))
         except Exception as exc:
             rows.append({"file": name, "score": "", "verdict": "ERROR", "error": str(exc)})
 
@@ -96,6 +101,8 @@ def main(argv=None):
     p.add_argument("--json-only", action="store_true", help="suppress console report")
     p.add_argument("--output", help="directory for JSON reports and summary.csv")
     p.add_argument("--ml", action="store_true", help="also score with the trained ML model")
+    p.add_argument("--extract-iocs", action="store_true",
+                   help="write blocklist-ready iocs.csv from SUSPICIOUS/MALICIOUS emails")
     args = p.parse_args(argv)
 
     ml_bundle = None
@@ -108,15 +115,23 @@ def main(argv=None):
     if args.output:
         os.makedirs(args.output, exist_ok=True)
 
+    ioc_sink = [] if args.extract_iocs else None
     kwargs = dict(use_api=not args.no_api, output_dir=args.output,
-                  json_only=args.json_only, ml_bundle=ml_bundle)
+                  json_only=args.json_only, ml_bundle=ml_bundle, ioc_sink=ioc_sink)
     if os.path.isdir(args.target):
         analyse_folder(args.target, **kwargs)
+        default_out = args.target
     elif os.path.isfile(args.target):
         analyse_file(args.target, **kwargs)
+        default_out = os.path.dirname(os.path.abspath(args.target))
     else:
         print(f"Not found: {args.target}")
         return 1
+
+    if ioc_sink is not None:
+        ioc_path = os.path.join(args.output or default_out, "iocs.csv")
+        count = iocs.write_iocs_csv(ioc_path, ioc_sink)
+        print(f"Extracted {count} unique IOC(s) -> {ioc_path}")
     return 0
 
 

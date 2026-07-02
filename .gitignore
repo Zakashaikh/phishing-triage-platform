@@ -9,3 +9,5 @@ corpus/
 models/
 evaluation/*.png
 evaluation/results.csv
+iocs.csv
+triage_out/
