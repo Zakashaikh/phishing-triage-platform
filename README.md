@@ -40,8 +40,18 @@ venv\Scripts\python.exe analyser.py sample.eml --no-api --ml
 # bulk-triage a folder -> per-email JSON reports + summary.csv
 venv\Scripts\python.exe analyser.py C:\path\to\inbox --output reports
 
-# run the test suite (81 tests)
+# also extract a blocklist-ready IOC list from everything that scored
+venv\Scripts\python.exe analyser.py C:\path\to\inbox --output reports --extract-iocs
+
+# run the test suite (102 tests)
 venv\Scripts\python.exe -m pytest tests -q
+```
+
+Or with Docker (dashboard on http://localhost:5000):
+
+```bash
+docker build -t phishing-triage .
+docker run --rm -p 5000:5000 phishing-triage
 ```
 
 Optional VirusTotal enrichment: put `VIRUSTOTAL_API_KEY=...` in a `.env` file. Without it the analyser runs identically and marks VT lookups as skipped.
@@ -127,6 +137,8 @@ Measuring per-rule fire rates by class exposed two rules that fired **more on le
 ![Score distribution](docs/img/score_distribution.png)
 ![Threshold sweep](docs/img/threshold_sweep.png)
 
+**Why recall 0.51 is the right trade, not a flaw.** This is a *triage* tool: its output is an analyst's queue, and analyst attention is the scarce resource. At a 20.6% false-positive rate (the untuned detector), one alert in three is noise and the queue gets ignored — the classic alert-fatigue failure. The tuned operating point trades recall for a 3.7% FP rate so that when the tool flags something, it is worth an analyst's time. The misses are dominated by plain-text phish with no URLs and no auth headers — nothing for a rule to fire on — which is precisely the gap the ML layer covers (recall 1.000 on held-out data). Precision-first heuristics for the queue, ML for the long tail.
+
 ## Rules vs. machine learning
 
 Four configurations, same stratified 80/20 split, judged only on 1,417 held-out emails (TF-IDF fitted on training text only — no leakage):
@@ -143,6 +155,26 @@ Four configurations, same stratified 80/20 split, judged only on 1,417 held-out 
 **Why ML wins here:** the rules' blind spot is plain-text phish with no auth headers and no URL tricks — nothing to fire on. The *words* in those messages are highly distinctive, and TF-IDF hands the model that signal, while also fixing the marketing-newsletter false positives.
 
 **Honest caveats** (the full version is in RESULTS.md): an AUC of 1.000 partly reflects how *different* the 2003 ham and 2005–2023 phish corpora are — the model learns corpus tells along with phishing tells. The fair claim is "near-perfect separation of this corpus", not "99.7% in production". The rules still earn their keep: explainable, zero training data, and they cover signals (SPF/DKIM, punycode) this corpus couldn't teach.
+
+## From verdict to action: IOC extraction
+
+A verdict alone doesn't feed the next SOC step — blocklists and watchlists do. `--extract-iocs` aggregates every URL, domain, IP, attachment SHA-256, and sender/reply-to address from emails that scored **SUSPICIOUS or MALICIOUS** into one deduplicated `iocs.csv`:
+
+```
+type,value,defanged,source,verdict
+url,http://paypa1.com/login,hxxp://paypa1[.]com/login,lookalike.eml,MALICIOUS
+domain,paypa1.com,paypa1[.]com,lookalike.eml,MALICIOUS
+sha256,e0254d4e2d27...,e0254d4e2d27...,attachment.eml,SUSPICIOUS
+reply_to,refunds@mail.ru,refunds@mail[.]ru,spoofed.eml,MALICIOUS
+```
+
+Design choices that matter in a SOC:
+
+- **Clean emails contribute nothing** — harvesting IOCs from benign mail would poison a blocklist with legitimate domains.
+- **Raw and defanged side by side** — the raw value feeds machines (mail-gateway blocklist, EDR watchlist, SIEM lookup), the defanged copy is safe to paste into tickets and chat.
+- **`source` traces every IOC back to its email**, so an entry can be audited before it's acted on.
+
+Typical loop: bulk-triage an inbox → review `summary.csv` → push `iocs.csv` entries to the mail gateway / DNS blocklist → escalate the MALICIOUS originals with their JSON reports attached.
 
 ## Validation on modern samples
 

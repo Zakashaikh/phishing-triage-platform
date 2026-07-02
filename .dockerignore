@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.claude/
+corpus/
+triage_out/
+*_report.json
+summary.csv
+iocs.csv
+docs/img/
+evaluation/*.png
+evaluation/results.csv
