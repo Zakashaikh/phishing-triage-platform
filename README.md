@@ -144,6 +144,20 @@ Four configurations, same stratified 80/20 split, judged only on 1,417 held-out 
 
 **Honest caveats** (the full version is in RESULTS.md): an AUC of 1.000 partly reflects how *different* the 2003 ham and 2005–2023 phish corpora are — the model learns corpus tells along with phishing tells. The fair claim is "near-perfect separation of this corpus", not "99.7% in production". The rules still earn their keep: explainable, zero training data, and they cover signals (SPF/DKIM, punycode) this corpus couldn't teach.
 
+## Validation on modern samples
+
+The corpus above is historical — its ham is from ~2003 and much of the phish predates SPF/DKIM/DMARC, so the authentication rules barely fire there (documented in RESULTS.md). To validate those rules on mail that actually carries `Authentication-Results` headers, there is a second, smaller evaluation path:
+
+```bash
+# drop modern .eml samples (e.g. exported from a spam folder) into corpus/live/,
+# then generate the writeup:
+python evaluation/case_study.py corpus/live
+```
+
+This writes [evaluation/CASE_STUDIES.md](evaluation/CASE_STUDIES.md): per-email verdicts, exactly which rules fired (with ATT&CK IDs), SPF/DKIM/DMARC outcomes, and the auth-rule fire rate up front. Output is safe to commit — recipient addresses are redacted and URLs defanged (`hxxp://evil[.]example`). It also accepts an AES-encrypted zip (same scheme as the main corpus) if antivirus objects to raw samples on disk.
+
+> Exporting samples from Gmail: open a message in Spam → three-dot menu → **Download message** → save the `.eml` into `corpus/live/` (gitignored).
+
 ## JSON report schema
 
 Every analysis writes `<name>_report.json`:
