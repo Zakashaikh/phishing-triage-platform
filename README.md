@@ -219,6 +219,27 @@ Every analysis writes `<name>_report.json`:
 }
 ```
 
+## Deployment & SOC integration
+
+In a SOC, phishing triage sits in a pipeline, not on a desktop. The tool exposes the two integration surfaces that pipeline needs:
+
+```mermaid
+flowchart LR
+    A["User 'Report Phishing' button<br/>or mail-gateway journaling"] -->|.eml| B["SOAR playbook<br/>(XSOAR, Splunk SOAR, TheHive)<br/>or watched-folder cron"]
+    B -->|"POST /analyse (.eml upload)"| C["Triage platform<br/>Flask API"]
+    B -->|"analyser.py folder/ --extract-iocs"| D["Triage platform<br/>CLI batch"]
+    C -->|JSON report| E["SIEM ingestion<br/>(Splunk / Elastic)"]
+    D -->|"per-email JSON + summary.csv"| E
+    D -->|iocs.csv| F["Blocklists & watchlists<br/>(mail gateway, EDR, TI platform)"]
+    E -->|"verdict=MALICIOUS"| G["Escalated ticket with<br/>findings + ATT&CK IDs"]
+```
+
+- **REST**: `POST /analyse` with a `.eml` upload returns the full JSON report — a SOAR enrichment action is a single HTTP call.
+- **CLI batch**: point `analyser.py` at a folder (e.g. where the gateway drops journaled mail) — per-email JSON reports for SIEM file ingestion, `summary.csv` for the queue, `iocs.csv` for blocklists.
+- **Machine-readable output**: the JSON schema below is stable and documented; findings carry MITRE ATT&CK IDs, so tickets and SIEM dashboards can pivot on technique.
+
+Honest production gaps (deliberate scope, would be next): authentication and rate-limiting on the API, a queue for burst volume, and native syslog/HEC emission instead of file-drop ingestion.
+
 ## Repo layout & the antivirus note
 
 ```
