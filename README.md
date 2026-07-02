@@ -178,17 +178,24 @@ Typical loop: bulk-triage an inbox → review `summary.csv` → push `iocs.csv` 
 
 ## Validation on modern samples
 
-The corpus above is historical — its ham is from ~2003 and much of the phish predates SPF/DKIM/DMARC, so the authentication rules barely fire there (documented in RESULTS.md). To validate those rules on mail that actually carries `Authentication-Results` headers, there is a second, smaller evaluation path:
+The corpus above is historical — its ham is from ~2003 and much of the phish predates SPF/DKIM/DMARC, so the authentication rules barely fire there (documented in RESULTS.md). To validate on mail that actually carries `Authentication-Results` headers, a second evaluation path pulls **30 recent real phishing samples** from [phishing_pot](https://github.com/rf-peixoto/phishing_pot) (honeypot-collected, recipients anonymized by the maintainers):
 
 ```bash
-# drop modern .eml samples (e.g. exported from a spam folder) into corpus/live/,
-# then generate the writeup:
-python evaluation/case_study.py corpus/live
+python evaluation/download_live.py            # -> corpus/live.zip (AES, gitignored)
+python evaluation/case_study.py corpus/live.zip --ml
 ```
 
-This writes [evaluation/CASE_STUDIES.md](evaluation/CASE_STUDIES.md): per-email verdicts, exactly which rules fired (with ATT&CK IDs), SPF/DKIM/DMARC outcomes, and the auth-rule fire rate up front. Output is safe to commit — recipient addresses are redacted and URLs defanged (`hxxp://evil[.]example`). It also accepts an AES-encrypted zip (same scheme as the main corpus) if antivirus objects to raw samples on disk.
+Measured on those 30 known-phish samples ([evaluation/CASE_STUDIES.md](evaluation/CASE_STUDIES.md) has the per-email breakdown):
 
-> Exporting samples from Gmail: open a message in Spam → three-dot menu → **Download message** → save the `.eml` into `corpus/live/` (gitignored).
+| | flagged |
+|---|---|
+| SPF/DKIM/DMARC rules fired | 12/30 — the auth rules earn their keep on modern mail |
+| Rules ≥ SUSPICIOUS | **11/30** — high-precision operating point, as designed |
+| ML model, p ≥ 0.5 | **30/30** — generalizes to phish from a source and era outside its training data |
+
+This is exactly the division of labour the design intends: precision-first rules for the analyst queue, ML for the long tail. Honest caveat: this sample set is all-phish, so it measures recall only — the ML false-positive rate on *modern legitimate* mail is not established here.
+
+The generator works on any folder of `.eml` files or AES zip (e.g. your own exported spam), and its output is safe to commit: recipient addresses are redacted and URLs defanged (`hxxp://evil[.]example`).
 
 ## JSON report schema
 

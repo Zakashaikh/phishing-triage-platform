@@ -91,6 +91,22 @@ def test_render_markdown_per_case_findings():
     assert "T1672" in md  # MITRE ids preserved
 
 
+def test_render_markdown_without_ml_has_no_ml_column():
+    md = case_study.render_markdown(make_cases())
+    assert "| ML p(phish) |" not in md
+
+
+def test_render_markdown_with_ml_column_and_flag_counts():
+    cases = make_cases()
+    cases[0]["ml_prob"] = 0.998   # spoofed
+    cases[1]["ml_prob"] = 0.012   # clean
+    md = case_study.render_markdown(cases)
+    assert "| ML p(phish) |" in md
+    assert "0.998" in md
+    assert "ML flagged 1/2" in md
+    assert "rules flagged 1/2" in md.lower()
+
+
 # --- sample loading ---------------------------------------------------------
 
 def test_load_samples_from_folder(tmp_path):

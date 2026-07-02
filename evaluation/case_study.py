@@ -23,6 +23,7 @@ from email.utils import getaddresses
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)  # allow running as a script from repo root
 
+import ml
 import scoring
 from attachments import extract_attachments
 from evaluation.download_corpus import read_zip
@@ -32,13 +33,16 @@ AUTH_RULE_IDS = ("spf_fail", "dkim_fail", "dmarc_fail")
 DEFAULT_OUT = os.path.join(ROOT, "evaluation", "CASE_STUDIES.md")
 
 
-def build_case(name, raw):
+def build_case(name, raw, ml_bundle=None):
     """Score one raw email; returns a case dict and never raises."""
     try:
         email_data = parse_email(raw)
         atts = extract_attachments(raw)
         result = scoring.score_email(email_data, atts)
+        prob = (ml.predict_proba(ml_bundle, email_data, atts, result)
+                if ml_bundle is not None else None)
         return {"name": name,
+                "ml_prob": prob,
                 "from_": email_data["from_"],
                 "subject": email_data["subject"],
                 "score": result["score"],
@@ -52,7 +56,8 @@ def build_case(name, raw):
     except Exception as exc:
         return {"name": name, "from_": "", "subject": "", "score": None,
                 "verdict": "ERROR", "auth": {}, "findings": [], "urls": [],
-                "recipients": [], "error": f"{type(exc).__name__}: {exc}"}
+                "recipients": [], "ml_prob": None,
+                "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _recipients(raw):
@@ -84,6 +89,7 @@ def render_markdown(cases):
     scored = [c for c in cases if c["error"] == ""]
     auth_hits = sum(1 for c in scored
                     if any(f["rule_id"] in AUTH_RULE_IDS for f in c["findings"]))
+    with_ml = any(c["ml_prob"] is not None for c in scored)
 
     lines = ["# Case studies — modern samples", ""]
     lines.append(f"{len(cases)} sample(s) analysed with the offline heuristic "
@@ -95,16 +101,30 @@ def render_markdown(cases):
                  f"{auth_hits}/{len(scored)} scored samples** — on the 2003-era "
                  "corpus they fired on almost none, which is why they are "
                  "validated here separately.")
-    lines += ["", "| File | Verdict | Score | SPF | DKIM | DMARC | Rules fired |",
-              "|------|---------|-------|-----|------|-------|-------------|"]
+    if with_ml:
+        rule_flags = sum(1 for c in scored if c["verdict"] != "CLEAN")
+        ml_flags = sum(1 for c in scored
+                       if c["ml_prob"] is not None and c["ml_prob"] >= 0.5)
+        lines.append("")
+        lines.append(f"**Rules flagged {rule_flags}/{len(scored)}** at the tuned "
+                     f"high-precision operating point; **ML flagged "
+                     f"{ml_flags}/{len(scored)}** at p ≥ 0.5.")
+
+    ml_head = " ML p(phish) |" if with_ml else ""
+    ml_sep = "-------------|" if with_ml else ""
+    lines += ["", f"| File | Verdict | Score | SPF | DKIM | DMARC |{ml_head} Rules fired |",
+              f"|------|---------|-------|-----|------|-------|{ml_sep}-------------|"]
     for c in cases:
         if c["error"]:
-            lines.append(f"| {c['name']} | ERROR | – | – | – | – | {c['error']} |")
+            dashes = "– | " * (7 if with_ml else 6)
+            lines.append(f"| {c['name']} | ERROR | {dashes}{c['error']} |")
             continue
         a = c["auth"]
+        ml_cell = (f" {c['ml_prob']:.3f} |"
+                   if with_ml and c["ml_prob"] is not None else (" – |" if with_ml else ""))
         lines.append(f"| {c['name']} | {c['verdict']} | {c['score']} "
-                     f"| {a['spf']} | {a['dkim']} | {a['dmarc']} "
-                     f"| {len(c['findings'])} |")
+                     f"| {a['spf']} | {a['dkim']} | {a['dmarc']} |{ml_cell} "
+                     f"{len(c['findings'])} |")
 
     for c in cases:
         if c["error"]:
@@ -144,9 +164,17 @@ def main(argv=None):
     p = argparse.ArgumentParser(description="Write CASE_STUDIES.md from modern .eml samples")
     p.add_argument("target", help="folder of .eml files, or an AES corpus zip")
     p.add_argument("--out", default=DEFAULT_OUT, help="output markdown path")
+    p.add_argument("--ml", action="store_true",
+                   help="also score each sample with the trained ML model")
     args = p.parse_args(argv)
 
-    cases = [build_case(name, raw) for name, raw in load_samples(args.target)]
+    ml_bundle = ml.load_bundle() if args.ml else None
+    if args.ml and ml_bundle is None:
+        print("--ml requested but no trained model found in models/.")
+        return 2
+
+    cases = [build_case(name, raw, ml_bundle=ml_bundle)
+             for name, raw in load_samples(args.target)]
     if not cases:
         print(f"No samples found in {args.target}")
         return 1
