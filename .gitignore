@@ -6,7 +6,8 @@ __pycache__/
 *_report.json
 summary.csv
 corpus/
-models/
+models/*
+!models/model.joblib
 evaluation/*.png
 evaluation/results.csv
 iocs.csv
