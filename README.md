@@ -1,5 +1,7 @@
 # Phishing Triage Platform
 
+[![tests](https://github.com/Zakashaikh/phishing-triage-platform/actions/workflows/tests.yml/badge.svg)](https://github.com/Zakashaikh/phishing-triage-platform/actions/workflows/tests.yml)
+
 A phishing email detector built and **measured like a detection-engineering project**, not a script: 15 explainable, MITRE ATT&CK-mapped heuristic rules, evaluated against **7,095 real emails**, tuned on the evidence, then benchmarked against trained ML models — all wrapped in a CLI and a local triage dashboard.
 
 **Headline results** (held-out data, details below):
