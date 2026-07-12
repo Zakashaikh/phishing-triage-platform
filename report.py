@@ -12,8 +12,13 @@ def build_report(email_data, attachments, score_result, final_verdict_value,
     email_keys = ("from_", "from_display", "from_domain", "reply_to", "reply_to_domain",
                   "return_path", "return_path_domain", "subject", "date",
                   "spf", "dkim", "dmarc", "has_html")
+    email_out = {k: email_data[k] for k in email_keys}
+    if email_data.get("auth_source") == "verified":
+        email_out["auth_source"] = "verified"
+        email_out["auth_reported"] = email_data["auth_reported"]
+        email_out["auth_details"] = email_data["auth_details"]
     return {
-        "email": {k: email_data[k] for k in email_keys},
+        "email": email_out,
         "urls": [u["url"] for u in email_data["urls"]],
         "ips": email_data["ips"],
         "parse_errors": email_data["parse_errors"],
@@ -41,7 +46,12 @@ def print_report(report):
     print(f"FROM:     {e['from_']}")
     print(f"REPLY-TO: {e['reply_to'] or '-'}")
     print(f"SUBJECT:  {e['subject']}")
-    print(f"SPF: {e['spf']}   DKIM: {e['dkim']}   DMARC: {e['dmarc']}")
+    if e.get("auth_source") == "verified":
+        print(f"SPF: {e['spf']}   DKIM: {e['dkim']}   DMARC: {e['dmarc']}   (verified via DNS/crypto)")
+        r = e["auth_reported"]
+        print(f"  header-reported: spf={r['spf']} dkim={r['dkim']} dmarc={r['dmarc']}")
+    else:
+        print(f"SPF: {e['spf']}   DKIM: {e['dkim']}   DMARC: {e['dmarc']}")
 
     print(f"\nSCORE: {report['score']}/100  ({report['heuristic_verdict']})")
     print("\n--- FINDINGS ---")

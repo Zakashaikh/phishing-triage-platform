@@ -124,6 +124,34 @@ Every rule is a small pure function; the report shows exactly which fired and wh
 
 Verdicts: score ≥ 50 → **MALICIOUS**, ≥ 20 → **SUSPICIOUS**, else **CLEAN**. Any VirusTotal hit (`malicious > 0`) overrides to MALICIOUS regardless of score.
 
+## Verified authentication (`--verify-auth`)
+
+By default the parser reads SPF/DKIM/DMARC out of the message's own
+`Received-SPF` and `Authentication-Results` headers — but those headers travel
+*inside* the email, so a sender can simply write `dkim=pass` into their own
+message. There's a trust boundary there, and `--verify-auth` closes it by
+computing the results instead of believing them ([auth.py](auth.py)):
+
+- **DKIM** — the signature is verified cryptographically, with the public key
+  fetched from DNS (`<selector>._domainkey.<domain>`).
+- **SPF** — the sender domain's published policy is evaluated against the IP
+  that handed the message to the receiving MTA (topmost public IP in the
+  `Received` chain — the one header the attacker can't write).
+- **DMARC** — the From domain's `_dmarc` policy is fetched live, with relaxed
+  identifier alignment against the DKIM `d=` domain and SPF envelope domain.
+
+Verified results override the reported ones; anything that can't be resolved
+(no network, dead domain) degrades to the header value, so offline behaviour
+is unchanged. The report shows both, and a 16th rule pays the feature off:
+`auth_header_forged` (+25, T1036) fires when `Authentication-Results` claims
+`dkim=pass` but the signature cryptographically fails — the header itself is
+the forgery. This rule is deliberately **not** part of the ML feature layout,
+which stays frozen at the 15 columns the shipped model was trained on.
+
+```powershell
+venv\Scripts\python.exe analyser.py suspicious.eml --no-api --verify-auth
+```
+
 ## Evaluation: measured, then tuned
 
 The detector was run against **7,095 labelled real emails** — 2,945 phishing (Nazario corpus, 2005–2023) and 4,150 legitimate (SpamAssassin easy/hard ham). Full methodology, tables, and error analysis: [evaluation/RESULTS.md](evaluation/RESULTS.md).

@@ -15,6 +15,8 @@ WEIGHTS = {
     "raw_ip_url": 20, "url_shortener": 10, "suspicious_tld": 10,
     "urgency_language": 7, "urgency_cap": 21,
     "dangerous_attachment": 30, "macro_attachment": 25,
+    # Only fires with --verify-auth: header claims a pass that crypto disproves.
+    "auth_header_forged": 25,
 }
 MALICIOUS_THRESHOLD = 50
 SUSPICIOUS_THRESHOLD = 20  # tuned: precision saturates ~0.90 by score 20 (see RESULTS.md)
@@ -222,6 +224,26 @@ def rule_urgency_language(e, atts):
     )
 
 
+def rule_auth_header_forged(e, atts):
+    """Authentication-Results said dkim=pass but the signature doesn't verify.
+
+    Only meaningful when auth.py has run (--verify-auth): e['dkim'] then holds
+    the *computed* result and e['auth_reported'] the header's claim. A claimed
+    pass with no valid signature means the sender wrote the header themselves.
+    """
+    reported = e.get("auth_reported")
+    if not reported:
+        return None
+    if reported.get("dkim") == "pass" and e["dkim"] in ("fail", "none"):
+        return _finding(
+            "auth_header_forged", WEIGHTS["auth_header_forged"],
+            "Authentication-Results claims dkim=pass but the signature "
+            f"verifies as {e['dkim']} — the header itself is forged",
+            "T1036",
+        )
+    return None
+
+
 # --- rules 14-15: attachments ---
 
 def rule_dangerous_attachment(e, atts):
@@ -251,9 +273,12 @@ RULES = [
     rule_punycode_domain, rule_raw_ip_url, rule_url_shortener,
     rule_suspicious_tld, rule_urgency_language,
     rule_dangerous_attachment, rule_macro_attachment,
+    rule_auth_header_forged,
 ]
 
-# Canonical ordered rule ids (one per entry in RULES), used as ML feature columns.
+# Canonical ordered rule ids used as ML feature columns. Deliberately does
+# NOT include auth_header_forged: the shipped model was trained on these 15
+# columns, and appending would shift the feature layout it expects.
 RULE_IDS = [
     "spf_fail", "dkim_fail", "dmarc_fail",
     "reply_to_mismatch", "return_path_mismatch",

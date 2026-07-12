@@ -12,13 +12,18 @@ import scoring
 from attachments import extract_attachments
 
 
-def analyse_email(source, use_api=True, ml_bundle=None):
+def analyse_email(source, use_api=True, ml_bundle=None, verify_auth=False):
     """Run the full pipeline on an .eml path or raw bytes; returns the report dict.
 
     Shared by the CLI (analyse_file) and the web dashboard (webapp/app.py).
+    verify_auth computes SPF/DKIM/DMARC via DNS and cryptography (auth.py)
+    instead of trusting the message's own Authentication-Results headers.
     """
     email_data = parse.parse_email(source)
     atts = extract_attachments(source)
+    if verify_auth:
+        import auth
+        auth.apply_verification(email_data, auth.verify_auth(source, email_data))
     score_result = scoring.score_email(email_data, atts)
 
     if use_api and enrichment.vt_available():
@@ -46,9 +51,9 @@ def analyse_email(source, use_api=True, ml_bundle=None):
 
 
 def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bundle=None,
-                 ioc_sink=None):
+                 ioc_sink=None, verify_auth=False):
     """Analyse one .eml; write its JSON report; return a summary row."""
-    rep = analyse_email(filepath, use_api=use_api, ml_bundle=ml_bundle)
+    rep = analyse_email(filepath, use_api=use_api, ml_bundle=ml_bundle, verify_auth=verify_auth)
     if ioc_sink is not None:
         ioc_sink.extend(iocs.extract_iocs(rep, source=os.path.basename(filepath)))
     if not json_only:
@@ -66,7 +71,7 @@ def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bu
 
 
 def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bundle=None,
-                   ioc_sink=None):
+                   ioc_sink=None, verify_auth=False):
     """Analyse every .eml in a folder; write summary.csv; never abort on one bad email."""
     names = sorted(f for f in os.listdir(folder) if f.lower().endswith(".eml"))
     if not names:
@@ -78,7 +83,8 @@ def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bu
         try:
             rows.append(analyse_file(os.path.join(folder, name), use_api=use_api,
                                      output_dir=output_dir, json_only=json_only,
-                                     ml_bundle=ml_bundle, ioc_sink=ioc_sink))
+                                     ml_bundle=ml_bundle, ioc_sink=ioc_sink,
+                                     verify_auth=verify_auth))
         except Exception as exc:
             rows.append({"file": name, "score": "", "verdict": "ERROR", "error": str(exc)})
 
@@ -103,6 +109,9 @@ def main(argv=None):
     p.add_argument("--ml", action="store_true", help="also score with the trained ML model")
     p.add_argument("--extract-iocs", action="store_true",
                    help="write blocklist-ready iocs.csv from SUSPICIOUS/MALICIOUS emails")
+    p.add_argument("--verify-auth", action="store_true",
+                   help="verify SPF/DKIM/DMARC via DNS/crypto instead of "
+                        "trusting the message's own headers (needs network)")
     args = p.parse_args(argv)
 
     ml_bundle = None
@@ -117,7 +126,8 @@ def main(argv=None):
 
     ioc_sink = [] if args.extract_iocs else None
     kwargs = dict(use_api=not args.no_api, output_dir=args.output,
-                  json_only=args.json_only, ml_bundle=ml_bundle, ioc_sink=ioc_sink)
+                  json_only=args.json_only, ml_bundle=ml_bundle, ioc_sink=ioc_sink,
+                  verify_auth=args.verify_auth)
     if os.path.isdir(args.target):
         analyse_folder(args.target, **kwargs)
         default_out = args.target
