@@ -267,9 +267,15 @@ flowchart LR
 
 - **REST**: `POST /analyse` with a `.eml` upload returns the full JSON report — a SOAR enrichment action is a single HTTP call.
 - **CLI batch**: point `analyser.py` at a folder (e.g. where the gateway drops journaled mail) — per-email JSON reports for SIEM file ingestion, `summary.csv` for the queue, `iocs.csv` for blocklists.
+- **Native Splunk HEC emission** (`--hec`): every verdict is POSTed to the HTTP Event Collector as a `sourcetype=phishing:triage` event — verdict, score, ML probability, auth results, rules fired, ATT&CK IDs, and raw IOCs (raw on purpose: the SIEM correlates them against proxy/DNS logs; defanging is for humans). Configure `SPLUNK_HEC_URL` and `SPLUNK_HEC_TOKEN` in `.env` (`SPLUNK_HEC_VERIFY=0` for a self-signed local box). A failed send is reported and never aborts triage.
+
+  ```powershell
+  venv\Scripts\python.exe analyser.py inbox\ --no-api --ml --hec
+  # then in Splunk:  sourcetype="phishing:triage" verdict=MALICIOUS | stats count by from_domain
+  ```
 - **Machine-readable output**: the JSON schema below is stable and documented; findings carry MITRE ATT&CK IDs, so tickets and SIEM dashboards can pivot on technique.
 
-Honest production gaps (deliberate scope, would be next): authentication and rate-limiting on the API, a queue for burst volume, and native syslog/HEC emission instead of file-drop ingestion.
+Honest production gaps (deliberate scope, would be next): authentication and rate-limiting on the API, a queue for burst volume, and batched/async HEC delivery for high throughput.
 
 ## Repo layout & the antivirus note
 

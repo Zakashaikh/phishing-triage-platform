@@ -52,11 +52,17 @@ def analyse_email(source, use_api=True, ml_bundle=None, verify_auth=False):
 
 
 def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bundle=None,
-                 ioc_sink=None, verify_auth=False):
+                 ioc_sink=None, verify_auth=False, hec=None):
     """Analyse one .eml; write its JSON report; return a summary row."""
     rep = analyse_email(filepath, use_api=use_api, ml_bundle=ml_bundle, verify_auth=verify_auth)
     if ioc_sink is not None:
         ioc_sink.extend(iocs.extract_iocs(rep, source=os.path.basename(filepath)))
+    if hec is not None:
+        import siem
+        outcome = siem.ship(hec, rep, source=os.path.basename(filepath))
+        if not json_only:
+            status = "sent" if outcome["sent"] else f"FAILED ({outcome['detail']})"
+            print(f"Splunk HEC: {status}")
     if not json_only:
         report_mod.print_report(rep)
 
@@ -72,7 +78,7 @@ def analyse_file(filepath, use_api=True, output_dir=None, json_only=False, ml_bu
 
 
 def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bundle=None,
-                   ioc_sink=None, verify_auth=False):
+                   ioc_sink=None, verify_auth=False, hec=None):
     """Analyse every .eml in a folder; write summary.csv; never abort on one bad email."""
     names = sorted(f for f in os.listdir(folder) if f.lower().endswith(".eml"))
     if not names:
@@ -85,7 +91,7 @@ def analyse_folder(folder, use_api=True, output_dir=None, json_only=False, ml_bu
             rows.append(analyse_file(os.path.join(folder, name), use_api=use_api,
                                      output_dir=output_dir, json_only=json_only,
                                      ml_bundle=ml_bundle, ioc_sink=ioc_sink,
-                                     verify_auth=verify_auth))
+                                     verify_auth=verify_auth, hec=hec))
         except Exception as exc:
             rows.append({"file": name, "score": "", "verdict": "ERROR", "error": str(exc)})
 
@@ -113,7 +119,18 @@ def main(argv=None):
     p.add_argument("--verify-auth", action="store_true",
                    help="verify SPF/DKIM/DMARC via DNS/crypto instead of "
                         "trusting the message's own headers (needs network)")
+    p.add_argument("--hec", action="store_true",
+                   help="ship each verdict to Splunk HEC "
+                        "(SPLUNK_HEC_URL / SPLUNK_HEC_TOKEN in .env)")
     args = p.parse_args(argv)
+
+    hec = None
+    if args.hec:
+        import siem
+        hec = siem.hec_config()
+        if hec is None:
+            print("--hec requested but SPLUNK_HEC_URL / SPLUNK_HEC_TOKEN are not set.")
+            return 2
 
     ml_bundle = None
     if args.ml:
@@ -128,7 +145,7 @@ def main(argv=None):
     ioc_sink = [] if args.extract_iocs else None
     kwargs = dict(use_api=not args.no_api, output_dir=args.output,
                   json_only=args.json_only, ml_bundle=ml_bundle, ioc_sink=ioc_sink,
-                  verify_auth=args.verify_auth)
+                  verify_auth=args.verify_auth, hec=hec)
     if os.path.isdir(args.target):
         analyse_folder(args.target, **kwargs)
         default_out = args.target
