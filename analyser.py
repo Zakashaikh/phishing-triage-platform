@@ -43,8 +43,9 @@ def analyse_email(source, use_api=True, ml_bundle=None, verify_auth=False):
         prob = ml.predict_proba(ml_bundle, email_data, atts, score_result)
         combined = ml.combined_verdict(score_result["verdict"], prob)
         fv = scoring.final_verdict({"verdict": combined}, url_results, ip_results, file_results)
+        explanation = ml.explain(ml_bundle, email_data, atts, score_result)
         ml_info = {"probability": prob, "verdict": ml.ml_verdict(prob),
-                   "config": ml_bundle["config"]}
+                   "config": ml_bundle["config"], "explain": explanation["top"]}
 
     return report_mod.build_report(email_data, atts, score_result, fv,
                                    url_results, ip_results, file_results, ml=ml_info)

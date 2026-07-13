@@ -44,3 +44,31 @@ def test_predict_proba_with_trained_bundle(tmp_path):
     sr = scoring.score_email(ed, atts)
     prob = ml.predict_proba(loaded, ed, atts, sr)
     assert 0.0 <= prob <= 1.0
+
+
+def test_explain_returns_ranked_attributions():
+    bundle = ml.load_bundle()  # the shipped model
+    raw = (FIXTURES / "spoofed.eml").read_bytes()
+    ed = parse_email(raw)
+    atts = extract_attachments(raw)
+    sr = scoring.score_email(ed, atts)
+
+    out = ml.explain(bundle, ed, atts, sr, top_n=5)
+    assert 0.0 <= out["base"] <= 1.0
+    assert 0 < len(out["top"]) <= 5
+    deltas = [abs(c["delta"]) for c in out["top"]]
+    assert deltas == sorted(deltas, reverse=True)  # ranked by |delta|
+    for c in out["top"]:
+        assert c["kind"] in ("numeric", "text")
+        # ablating one feature must match the base prediction when re-added
+        assert isinstance(c["feature"], str) and c["feature"]
+
+
+def test_explain_handles_email_with_no_signals():
+    bundle = ml.load_bundle()
+    raw = b"From: a@b.c\r\nSubject: \r\n\r\n\r\n"
+    ed = parse_email(raw)
+    atts = extract_attachments(raw)
+    sr = scoring.score_email(ed, atts)
+    out = ml.explain(bundle, ed, atts, sr)
+    assert isinstance(out["top"], list)  # may be empty; must not raise

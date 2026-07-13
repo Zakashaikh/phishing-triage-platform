@@ -107,6 +107,10 @@ def print_report(report):
         print("\n--- MACHINE LEARNING ---")
         print(f"  model: {m['config']}")
         print(f"  phishing probability: {m['probability']:.3f}  -> {m['verdict']}")
+        if m.get("explain"):
+            print("  why (ablation attribution; +pushes toward phish):")
+            for c in m["explain"]:
+                print(f"    {c['delta']:+.3f}  {c['feature']}")
 
     print(f"\nFINAL VERDICT: {report['final_verdict']}")
     print("=" * 60)

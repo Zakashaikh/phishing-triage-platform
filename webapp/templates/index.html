@@ -97,6 +97,7 @@
       <div style="display:flex;align-items:center;gap:14px">
         <div id="mlbar" style="flex:1"><div></div></div><div id="mltext"></div>
       </div>
+      <div id="mlwhy" style="margin-top:12px"></div>
     </section>
     <section><h2>URLs (defanged)</h2><div id="urls"></div></section>
     <section><h2>IPs (defanged)</h2><div id="ips"></div></section>
@@ -208,6 +209,12 @@ function render(rep) {
     bar.style.width = pct + "%";
     bar.style.background = colorOf(rep.ml.verdict);
     $("mltext").textContent = `${pct}% phishing probability (${rep.ml.config})`;
+    // why: single-feature ablation attribution; +delta pushes toward phishing
+    table($("mlwhy"), ["Δp", "Signal the model is reacting to"],
+      (rep.ml.explain || []).map(c => [
+        {cls: "pts", text: (c.delta >= 0 ? "+" : "") + c.delta.toFixed(3)},
+        c.feature]),
+      "no attribution available");
   } else $("mlsec").style.display = "none";
 
   table($("urls"), ["URL"], rep.urls.map(u => [defang(u)]), "no URLs in this email");

@@ -17,7 +17,7 @@ A phishing email detector built and **measured like a detection-engineering proj
 
 ## The dashboard
 
-Drop an `.eml` file on the page and get a triage view: score gauge, verdict, the red-flag findings with ATT&CK technique tags, ML probability, defanged IOCs, and a safe (fully escaped) body preview with the deceptive links highlighted.
+Drop an `.eml` file on the page and get a triage view: score gauge, verdict, the red-flag findings with ATT&CK technique tags, ML probability **with per-email attribution** (which signals — words, rules, structure — pushed the model's verdict, computed by single-feature ablation), defanged IOCs, and a safe (fully escaped) body preview with the deceptive links highlighted.
 
 ```
 venv\Scripts\python.exe webapp\app.py     →  http://127.0.0.1:5000
@@ -242,7 +242,8 @@ Every analysis writes `<name>_report.json`:
   "score": 55,
   "heuristic_verdict": "MALICIOUS",   // from the rules alone
   "final_verdict": "MALICIOUS",       // after VT override / ML combination
-  "ml":     { "probability": 0.999, "verdict": "MALICIOUS", "config": "histgbm_hybrid" },
+  "ml":     { "probability": 0.999, "verdict": "MALICIOUS", "config": "histgbm_hybrid",
+              "explain": [{ "feature": "term 'account'", "kind": "text", "delta": 0.241 }] },
   "enrichment": { "urls": [...], "ips": [...], "files": [...] },
   "parse_errors": [],
   "body_preview": "first 2000 chars of body text"
