@@ -208,22 +208,22 @@ Typical loop: bulk-triage an inbox → review `summary.csv` → push `iocs.csv` 
 
 ## Validation on modern samples
 
-The corpus above is historical — its ham is from ~2003 and much of the phish predates SPF/DKIM/DMARC, so the authentication rules barely fire there (documented in RESULTS.md). To validate on mail that actually carries `Authentication-Results` headers, a second evaluation path pulls **30 recent real phishing samples** from [phishing_pot](https://github.com/rf-peixoto/phishing_pot) (honeypot-collected, recipients anonymized by the maintainers):
+The corpus above is historical — its ham is from ~2003 and much of the phish predates SPF/DKIM/DMARC, so the authentication rules barely fire there (documented in RESULTS.md). To validate on mail that actually carries `Authentication-Results` headers, a second evaluation path pulls the **entire [phishing_pot](https://github.com/rf-peixoto/phishing_pot) corpus — 8,614 real phishing emails** collected by honeypots (recipients anonymized by the maintainers):
 
 ```bash
-python evaluation/download_live.py            # -> corpus/live.zip (AES, gitignored)
-python evaluation/case_study.py corpus/live.zip --ml
+python evaluation/download_live.py --all      # one tarball -> corpus/live.zip (AES, gitignored)
+python evaluation/validate_modern.py          # -> evaluation/MODERN_VALIDATION.md
 ```
 
-Measured on those 30 known-phish samples ([evaluation/CASE_STUDIES.md](evaluation/CASE_STUDIES.md) has the per-email breakdown):
+Measured across all **8,585 parseable samples** ([evaluation/MODERN_VALIDATION.md](evaluation/MODERN_VALIDATION.md) has per-rule fire rates; [CASE_STUDIES.md](evaluation/CASE_STUDIES.md) keeps per-email detail for the 30 newest):
 
-| | flagged |
+| Detector | Recall on modern phish |
 |---|---|
-| SPF/DKIM/DMARC rules fired | 12/30 — the auth rules earn their keep on modern mail |
-| Rules ≥ SUSPICIOUS | **11/30** — high-precision operating point, as designed |
-| ML model, p ≥ 0.5 | **30/30** — generalizes to phish from a source and era outside its training data |
+| Rules ≥ SUSPICIOUS | 2,071/8,585 (**24.1%**) — the high-precision operating point stays quiet, as designed |
+| ML model, p ≥ 0.5 | 8,272/8,585 (**96.4%**) — strong generalization to a source and era fully outside its training data |
+| Rules OR ML (triage union) | 8,337/8,585 (**97.1%**) |
 
-This is exactly the division of labour the design intends: precision-first rules for the analyst queue, ML for the long tail. Honest caveat: this sample set is all-phish, so it measures recall only — the ML false-positive rate on *modern legitimate* mail is not established here.
+Two honest lessons scale taught that a 30-sample check couldn't: an earlier run on just the 30 newest samples scored 30/30 for the ML — at 8,585 samples that settles to 96.4%, which is the number worth quoting. And modern phish largely evades static heuristics (24.1%): the SPF/DKIM/DMARC rules fire on a quarter of samples, but most modern lures are too clean for a rules-only detector — which is precisely the gap the ML layer covers. Caveat as always: this corpus is all-phish, so it measures recall only; the false-positive rate on *modern legitimate* mail is not established here.
 
 The generator works on any folder of `.eml` files or AES zip (e.g. your own exported spam), and its output is safe to commit: recipient addresses are redacted and URLs defanged (`hxxp://evil[.]example`).
 
