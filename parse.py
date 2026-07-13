@@ -120,8 +120,11 @@ def _walk_bodies(msg, errors):
         charset = part.get_content_charset() or "utf-8"
         try:
             decoded = payload.decode(charset, errors="replace")
-        except LookupError:  # charset name is attacker-controlled and may be garbage
-            errors.append(f"unknown charset {charset!r}; decoded as utf-8")
+        except (LookupError, ValueError, TypeError):
+            # The charset name is attacker-controlled: it may be unregistered
+            # (LookupError), a codec that refuses to decode like 'undefined'
+            # (UnicodeError), or a bytes-to-bytes codec like 'hex' (TypeError).
+            errors.append(f"undecodable charset {charset!r}; decoded as utf-8")
             decoded = payload.decode("utf-8", errors="replace")
         if ctype == "text/plain":
             text += decoded
