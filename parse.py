@@ -117,7 +117,12 @@ def _walk_bodies(msg, errors):
             continue
         if payload is None:
             continue
-        decoded = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+        charset = part.get_content_charset() or "utf-8"
+        try:
+            decoded = payload.decode(charset, errors="replace")
+        except LookupError:  # charset name is attacker-controlled and may be garbage
+            errors.append(f"unknown charset {charset!r}; decoded as utf-8")
+            decoded = payload.decode("utf-8", errors="replace")
         if ctype == "text/plain":
             text += decoded
         else:
